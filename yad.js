@@ -55,8 +55,12 @@ Y = {
             for (var property in listeners) {
                 if (listeners.hasOwnProperty(property)) {
                     listeners[property].listener.call(listeners[property].context, event);
+                    if(event.isStopped()) {
+                        break;
+                    }
                 }
             }
+            return this;
         },
         _dispatch: function (event) {
             var names = event.getNames();
@@ -67,9 +71,12 @@ Y = {
                     if (thereis(els[0])) {
                         this._runListeners(els[0], event);
                     }
+                    if(event.isStopped()) {
+                        break;
+                    }
                 }
             }
-            event.done();
+            return this;
         },
         _say: function (event, data, closure, immediate) {
             if (!thereis(event)) {
@@ -183,7 +190,7 @@ Y.AE.prototype = {
     _name: 'exclamation',
     _data: {},
     _names: ['exclamation'],
-    _stop: false,
+    _stopped: false,
     _closure: undefined,
     _parse: function (name, data, closure) {
         this.setName(name)
@@ -214,11 +221,14 @@ Y.AE.prototype = {
         return this;
     },
     stopPropagation: function () {
-        this.stop = true;
+        this._stopped = true;
         return this;
     },
+    stop: function () {
+        return this.stopPropagation();
+    },
     isStopped: function () {
-        return this.stop;
+        return this._stopped;
     },
     getName: function () {
         return this._name;
