@@ -31,11 +31,18 @@ YAD = {
     createEvent: function (name, data, closure) {
         return new this.Event(name, data, closure);
     },
+    createListener: function (executor, context, name) {
+        return new this.Listener(executor, context, name);
+    },
     Dispatcher: function () {
+        return this instanceof YAD.Dispatcher ? this : this.getDispatcher();
     },
     Event: function (name, data, closure) {
         // "this" is YE, when calling new YAD.Event
         this._parse(name, data, closure);
+    },
+    Listener: function (name, executor, context) {
+        this._parse(name, executor, context);
     },
     yell: function (event, data, closure) {
         return this.getDispatcher().say(event, data, closure);
@@ -54,24 +61,54 @@ YAD.Dispatcher.prototype = {
     _eventListeners: [],
     _listeners: [],
     _createEvent: function (event, data, closure) {
-        return new YAD.Event(event, data, closure);
+        return YAD.createEvent(event, data, closure);
     },
     _isEventObject: function (event) {
         return event instanceof YAD.Event;
     },
-    _prepareEvent: function (event, data, closure) {
+    _prepareEvents: function (event, data) {
+        var events = [];
         if (this._isEventObject(event)) {
             event.setData(data);
-            event.setClosure(closure);
-            return event;
+            events.push(event);
         } else {
-            return this._createEvent(event, data, closure);
+            var names = event.split('.');
+            var name = names[0];
+            events.push(this._createEvent(name, data));
+            for (var i = 1; i < names.length; i++) {
+                name = name + '.' + names[i];
+                events.unshift(this._createEvent(name, data));
+            }
         }
+        return events;
+    },
+    _parseListenerInfo: function (listenerInfo, context) {
+        if (listenerInfo instanceof YAD.Listener) {
+            return listenerInfo;
+        }
+        if (Array.isArray(listenerInfo)) {
+            return listenerInfo.length >= 2 ?
+                    YAD.createListener(listenerInfo[0], listenerInfo[1]) :
+                    YAD.createListener(listenerInfo[0], context);
+        }
+        return YAD.createListener(listenerInfo, context);
+    },
+    _prepareListeners: function (listenersInfo, context) {
+        var listeners = [];
+        if (!Array.isArray(listenersInfo)) {
+            listeners.push(this._parseListenerInfo(listenersInfo, context));
+            return listeners;
+        }
+        ;
+        for (var i = 0; i < listenersInfo.length; i++) {
+            listeners.push(this._parseListenerInfo(listenersInfo[i]), context);
+        }
+        return listeners;
     },
     _runListeners: function (listeners, event) {
         for (var property in listeners) {
             if (listeners.hasOwnProperty(property)) {
-                listeners[property].listener.call(listeners[property].context, event);
+                listeners[property].invoke(event);
                 if (event.isStopped()) {
                     break;
                 }
@@ -79,95 +116,54 @@ YAD.Dispatcher.prototype = {
         }
         return this;
     },
-    _dispatch: function (event) {
-        var names = event.getNames();
+    _dispatch: function (events) {
         var els = this._eventListeners;
-        for (var i = 0; i < names.length; i++) {
-            if (els.hasOwnProperty(names[i])) {
-                els = els[names[i]];
-                if (thereis(els[0])) {
-                    this._runListeners(els[0], event);
-                }
-                if (event.isStopped()) {
-                    break;
-                }
+        for (var i = 0; i < events.length; i++) {
+            var name = events[i].getName();
+            if (els.hasOwnProperty(name)) {
+                this._runListeners(els[name], events[i]);
             }
         }
         return this;
     },
-    _addListener: function (event, listener, context) {
-        var listenerName = listener.toString();
-        this._listeners[listenerName] = listener;
-        var names = event.getNames();
-        var els = this._eventListeners;
-        for (var i = 0; i < names.length; i++) {
-            if (!els.hasOwnProperty(names[i])) {
-                els[names[i]] = [[]];
-            }
-            els = els[names[i]];
+    _addListener: function (event, listener) {
+        this._listeners[listener.getName()] = listener;
+        if (!this._eventListeners.hasOwnProperty(event.getName())) {
+            this._eventListeners[event.getName()] = [];
         }
-        els[0][listenerName] = {listener: listener, context: context};
+        this._eventListeners[event.getName()][listener.getName()] = listener;
         return this;
     },
     _removeListener: function (listener) {
-        var listenerName = listener.toString();
-        if (thereis(this._listeners[listenerName])) {
-            delete this._listeners[listenerName];
+        if (thereis(this._listeners[listener.getName()])) {
+            delete this._listeners[listener.getName()];
         }
         return this;
     },
     _removeEvent: function () {
 
     },
-    _parseEventInfo: function (eventInfo) {
-        var events = [];
-        if (this._isEventObject(eventInfo)) {
-            events.push(eventInfo);
-        } else {
-            var es = eventInfo.split(' ');
-            for (var i = 0; i < es.length; i++) {
-                events.push(this._createEvent(es[i]));
-            }
-        }
-        return events;
-    },
-    _parseListenerInfo: function (listenerInfo) {
-        var listeners = [];
-        if (!(listenerInfo instanceof Array)) {
-            listenerInfo = [listenerInfo];
-        } else {
-
-        }
-        for (var i = 0; i < listenerInfo.length; i++) {
-            if (isCallable(listenerInfo[i])) {
-                listeners.push(listenerInfo[i]);
-            }
-        }
-        return listeners;
-    },
     say: function (event, data, closure, immediate) {
         if (!thereis(event)) {
             return undefined;
         }
         immediate = iselse(immediate, true);
-        var e = this._prepareEvent(event, data, closure);
+        var events = this._prepareEvents(event, data);
         if (immediate) {
-            this._dispatch(e);
-            return e.done();
+            this._dispatch(events);
         } else {
-            setTimeout(function (e) {
-                this._dispatch(e);
-                return e.done();
-            }.bind(this), this._delay, e);
+            setTimeout(function (events) {
+                this._dispatch(events);
+            }.bind(this), this._delay, events);
         }
+        return thereis(closure) ? closure() : true;
     },
     listen: function (event, listener, context) {
-        var events = this._parseEventInfo(event);
-        var listeners = this._parseListenerInfo(listener);
-        context = iselse(context, window);
+        var events = this._prepareEvents(event);
+        var listeners = this._prepareListeners(listener, context);
         for (var i = 0; i < events.length; i++) {
             for (var j = 0; j < listeners.length; j++) {
-                this._addListener(events[i], listeners[j], context);
+                this._addListener(events[i], listeners[j]);
             }
         }
         return this;
@@ -196,13 +192,9 @@ YAD.Dispatcher.prototype = {
 YAD.Event.prototype = {
     _name: 'exclamation',
     _data: {},
-    _names: ['exclamation'],
     _stopped: false,
-    _closure: undefined,
-    _parse: function (name, data, closure) {
-        this.setName(name)
-                .setData(data)
-                .setClosure(closure);
+    _parse: function (name, data) {
+        this.setName(name).setData(data);
         return this;
     },
     setCarryOn: function (key, value) {
@@ -211,20 +203,10 @@ YAD.Event.prototype = {
     },
     setName: function (name) {
         this._name = iselse(name, this._name);
-        this._names = this._name.split('.');
-//        var names = this._name.split('.');
-//        this._names = [names[0]];
-//        for(var i = 1; i < names.length; i++) {
-//            this._names.push(this._names[i-1] + '.' + names[i]);
-//        }
         return this;
     },
     setData: function (data) {
         this._data = iselse(data, this._data);
-        return this;
-    },
-    setClosure: function (closure) {
-        this._closure = closure;
         return this;
     },
     stopPropagation: function () {
@@ -240,19 +222,47 @@ YAD.Event.prototype = {
     getName: function () {
         return this._name;
     },
-    getNames: function () {
-        return this._names;
-    },
     getData: function () {
         return this._data;
-    },
-    getClosure: function () {
-        return this._closure;
-    },
-    done: function () {
-        if (thereis(this._closure)) {
-            this._closure();
-        }
+    }
+};
+
+YAD.Listener.prototype = {
+    _name: undefined,
+    _executor: undefined,
+    _context: undefined,
+    _parse: function (executor, context, name) {
+        this.setExecutor(executor).setContext(context).setName(name);
         return this;
+    },
+    setName: function (name) {
+        this._name = iselse(name, this._name);
+        return this;
+    },
+    setExecutor: function (executor) {
+        this._executor = executor;
+        this._name = iselse(this._name, this._executor.toString());
+        return this;
+    },
+    setContext: function (context) {
+        this._context = iselse(context, window);
+        return this;
+    },
+    getName: function () {
+        return this._name;
+    },
+    getExecutor: function () {
+        return this._executor;
+    },
+    getContext: function () {
+        return this._context;
+    },
+    isViable: function () {
+        return isCallable(this._executor);
+    },
+    invoke: function (event) {
+        if (this.isViable()) {
+            return this._executor.call(this._context, event);
+        }
     }
 };
