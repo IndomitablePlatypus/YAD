@@ -25,6 +25,10 @@ function iselse(variable, value) {
 
 YAD = {
     _dispatcher: undefined,
+    /**
+     * 
+     * @returns {YAD.Dispatcher}
+     */
     getDispatcher: function () {
         return thereis(this._dispatcher) ? this._dispatcher : this._dispatcher = new this.Dispatcher();
     },
@@ -99,9 +103,22 @@ YAD.Dispatcher.prototype = {
             listeners.push(this._parseListenerInfo(listenersInfo, context));
             return listeners;
         }
-        ;
         for (var i = 0; i < listenersInfo.length; i++) {
-            listeners.push(this._parseListenerInfo(listenersInfo[i]), context);
+            listeners.push(this._parseListenerInfo(listenersInfo[i], context));
+        }
+        return listeners;
+    },
+    _prepareListenerNames: function (listenerInfo) {
+        var listeners = [];
+        if (!Array.isArray(listenerInfo)) {
+            listeners = [listenerInfo];
+        } else {
+            listeners = listenerInfo;
+        }
+        for (var i = 0; i < listeners.length; i++) {
+            if (typeof listeners[i] !== 'string') {
+                listeners[i] = listeners[i].toString();
+            }
         }
         return listeners;
     },
@@ -134,14 +151,21 @@ YAD.Dispatcher.prototype = {
         this._eventListeners[event.getName()][listener.getName()] = listener;
         return this;
     },
-    _removeListener: function (listener) {
-        if (thereis(this._listeners[listener.getName()])) {
-            delete this._listeners[listener.getName()];
+    _removeListener: function (listenerName) {
+        if (thereis(this._listeners[listenerName])) {
+            delete this._listeners[listenerName];
+        }
+        for(var eventName in this._eventListeners) {
+            if(this._eventListeners.hasOwnProperty(eventName)) {
+                if(thereis(this._eventListeners[eventName][listenerName])) {
+                    delete this._eventListeners[eventName][listenerName];
+                }
+            }
         }
         return this;
     },
     _removeEvent: function () {
-
+        
     },
     say: function (event, data, closure, immediate) {
         if (!thereis(event)) {
@@ -161,24 +185,33 @@ YAD.Dispatcher.prototype = {
     listen: function (event, listener, context) {
         var events = this._prepareEvents(event);
         var listeners = this._prepareListeners(listener, context);
-        for (var i = 0; i < events.length; i++) {
-            for (var j = 0; j < listeners.length; j++) {
-                this._addListener(events[i], listeners[j]);
-            }
+        for (var j = 0; j < listeners.length; j++) {
+            this._addListener(events[0], listeners[j]);
         }
         return this;
     },
     unlistenListener: function (listener) {
-        var listeners = this._parseListenerInfo(listener);
-        for (var i = 0; i < listeners.length; i++) {
-            this._removeListener(listeners[i]);
+        var listenerNames = this._prepareListenerNames(listener);
+        for (var i = 0; i < listenerNames.length; i++) {
+            this._removeListener(listenerNames[i]);
         }
         return this;
     },
     unlistenEvent: function (event) {
-        var events = this._parseEventInfo(event);
-        for (var i = 0; i < events.length; i++) {
-            this._removeEvent(events[i]);
+        var events = this._prepareEvents(event);
+        if(thereis(this._eventListeners[events[0].getName()])) {
+            delete this._eventListeners[events[0].getName()];
+        }
+        return this;
+    },
+    unlistenEventHeap: function (event) {
+        var events = this._prepareEvents(event);
+        for(var property in this._eventListeners) {
+            if(this._eventListeners.hasOwnProperty(property)) {
+                if(property.indexOf(events[0].getName()) === 0) {
+                    delete this._eventListeners[property];
+                }
+            }
         }
         return this;
     },
