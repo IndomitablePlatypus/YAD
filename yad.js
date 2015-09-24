@@ -55,13 +55,10 @@ var YAD = {
      * @method
      * @param {String} name Event name (identifier)
      * @param {Object|null} data Basically any data associated with the event
-     * @param {Function|null} closure Closure for the event. 
-     *                                Closure will be executed after all relevant 
-     *                                listeners are notified of the event.
      * @returns {YAD.Event} New <b>Event</b> object
      */
-    createEvent: function (name, data, closure) {
-        return new this.Event(name, data, closure);
+    createEvent: function (name, data) {
+        return new this.Event(name, data);
     },
     /**
      * Creates new <b>YAD.Listener</b> object
@@ -101,14 +98,11 @@ var YAD = {
      * @class
      * @param {String} name Event name (identifier)
      * @param {Object|null} data Basically any data associated with the event
-     * @param {Function|null} closure Closure for the event. 
-     *                                Closure will be executed after all relevant 
-     *                                listeners are notified of the event.
      * @returns {YAD.Event}
      */
-    Event: function (name, data, closure) {
+    Event: function (name, data) {
         // "this" is YAD.Event, when calling new YAD.Event
-        this._parse(name, data, closure);
+        this._parse(name, data);
     },
     /**
      * Declaration of YAD.Listener class. Use <b>YAD.createListener</b> instead.
@@ -238,16 +232,76 @@ var YAD = {
 };
 
 YAD.Dispatcher.prototype = {
+    /**
+     * Delay execution of listeners for number of milliseconds
+     * 
+     * @private
+     * @property
+     * @type {Number}
+     */
     _delay: 0,
+    /**
+     * ToDo вспомнить, нахера
+     * @private
+     * @property
+     * @type {Number}
+     */
     _dispatchMode: 0,
+    /**
+     * Event listeners. Array is used as a hash table, where keys are event names.
+     * 
+     * @private
+     * @property
+     * @type {Array}
+     */
     _eventListeners: [],
+    /**
+     * Listeners. Array is used as a hash table, where keys are listener names.
+     * 
+     * @private
+     * @property
+     * @type {Array}
+     */
     _listeners: [],
-    _createEvent: function (event, data, closure) {
-        return YAD.createEvent(event, data, closure);
+    /**
+     * Alias to YAD.createEvent. Used for convenience.
+     * 
+     * @private
+     * @method
+     * @param {String} event
+     * @param {Object|null} data
+     * @returns {YAD.Event}
+     * @see YAD.createEvent
+     */
+    _createEvent: function (event, data) {
+        return YAD.createEvent(event, data);
     },
+    /**
+     * Check if variable is YAD.Event instance
+     * 
+     * @private
+     * @method
+     * @param {mixed} event
+     * @returns {Boolean} True if variable is YAD.Event instance, false otherwise
+     */
     _isEventObject: function (event) {
         return event instanceof YAD.Event;
     },
+    /**
+     * Transform some amorphous data to array of of YAD.Event objects.
+     * 
+     * @private
+     * @method
+     * @param {YAD.Event|String} event Either YAD.Event instance or string - event name.
+     *                                 If string contains any dots, it is split by them and 
+     *                                 a number of new events are created. Each dot represents 
+     *                                 new level of events hierarchy, so event 
+     *                                 'log.someaction.success' will spawn events for 
+     *                                 'log', 'log.someaction' and 'log.someaction.success' 
+     *                                 itself.
+     * @param {type} data Any object
+     * @returns {Array} Prepared events (array of YAD.Event objects)
+     */
     _prepareEvents: function (event, data) {
         var events = [];
         if (this._isEventObject(event)) {
@@ -264,6 +318,17 @@ YAD.Dispatcher.prototype = {
         }
         return events;
     },
+    /**
+     * Analyze passed data and return corresponding YAD.Listener object (either
+     * existing or new one)
+     * 
+     * @private
+     * @method
+     * @param {YAD.Listener|mixed} listenerInfo YAD.Listener instance or any callable
+     *                                          or array of callable and its context
+     * @param {Object} context Context of listener
+     * @returns {YAD.Listener}
+     */
     _parseListenerInfo: function (listenerInfo, context) {
         if (listenerInfo instanceof YAD.Listener) {
             return listenerInfo;
@@ -275,6 +340,15 @@ YAD.Dispatcher.prototype = {
         }
         return YAD.createListener(listenerInfo, context);
     },
+    /**
+     * Create array of listeners from given data
+     * 
+     * @private
+     * @method
+     * @param {mixed} listenersInfo Array, or single callable, or single YAD.Listener
+     * @param {Object} context Context of listener(s)
+     * @returns {Array}
+     */
     _prepareListeners: function (listenersInfo, context) {
         var listeners = [];
         if (!Array.isArray(listenersInfo)) {
@@ -286,6 +360,15 @@ YAD.Dispatcher.prototype = {
         }
         return listeners;
     },
+    /**
+     * Create array of listener names from given data
+     * 
+     * @private
+     * @method
+     * @param {mixed} listenerInfo Single name or single listener, or 
+     *                             any combination of abovementioned in array
+     * @returns {Array}
+     */
     _prepareListenerNames: function (listenerInfo) {
         var listeners = [];
         if (!Array.isArray(listenerInfo)) {
@@ -300,6 +383,15 @@ YAD.Dispatcher.prototype = {
         }
         return listeners;
     },
+    /**
+     * Invoke all listeners from given ArrayObject
+     * 
+     * @private
+     * @method
+     * @param {Object} listeners Array (hash table, object) of listeners
+     * @param {YAD.Event} event
+     * @returns {YAD.Dispatcher}
+     */
     _runListeners: function (listeners, event) {
         for (var property in listeners) {
             if (listeners.hasOwnProperty(property)) {
@@ -311,6 +403,14 @@ YAD.Dispatcher.prototype = {
         }
         return this;
     },
+    /**
+     * Dispatch events
+     * 
+     * @private
+     * @method
+     * @param {Object} events Array (hash table, object) of events
+     * @returns {YAD.Dispatcher}
+     */
     _dispatch: function (events) {
         var els = this._eventListeners;
         for (var i = 0; i < events.length; i++) {
@@ -321,6 +421,15 @@ YAD.Dispatcher.prototype = {
         }
         return this;
     },
+    /**
+     * Register new listener
+     * 
+     * @private
+     * @method
+     * @param {YAD.Event} event
+     * @param {YAD.Listener} listener
+     * @returns {YAD.Dispatcher}
+     */
     _addListener: function (event, listener) {
         this._listeners[listener.getName()] = listener;
         if (!this._eventListeners.hasOwnProperty(event.getName())) {
@@ -329,6 +438,14 @@ YAD.Dispatcher.prototype = {
         this._eventListeners[event.getName()][listener.getName()] = listener;
         return this;
     },
+    /**
+     * Remove listener registration
+     * 
+     * @private
+     * @method
+     * @param {String} listenerName  Listener name
+     * @returns {YAD.Dispatcher}
+     */
     _removeListener: function (listenerName) {
         if (thereis(this._listeners[listenerName])) {
             delete this._listeners[listenerName];
@@ -342,9 +459,40 @@ YAD.Dispatcher.prototype = {
         }
         return this;
     },
-    _removeEvent: function () {
-
-    },
+    /**
+     * Dispatches event (creating it if necessary).
+     * 
+     * @public
+     * @method
+     * @param {YAD.Event|String} event Either single <b>YAD.Event</b> instance
+     *                                 or string to be used as Event name. 
+     *                                 If string contains <b>"."</b> symbols,
+     *                                 several events will be fired. <br />
+     *                                 For example: <br />
+     *                                 <b>log.someaction.success</b> will be dispatched
+     *                                 to all listeners of <b>log</b> event, 
+     *                                 all listeners of <b>log.someaction</b> event and 
+     *                                 all listeners of <b>log.someaction.success<b> event.
+     *                                 Each event will contain <b>data</b> object, but closure 
+     *                                 will be called only once still.
+     * @param {Object|null} data Basically any data associated with the event.
+     *                                 If <b>event</b> is YAD.Event instance, and this param 
+     *                                 is used, event.data will be rewritten with this param value.
+     *                                 Pass <b>undefined</b> if you want to omit this param yet 
+     *                                 use <b>closure</b>.
+     * @param {Function|null} closure Closure for the event. 
+     *                                 Closure will be executed after all relevant 
+     *                                 listeners are notified of the event.
+     *                                 Closure should accept array of Event objects, event if 
+     *                                 Event instance is passed as the first param (in that case 
+     *                                 array will contain one element).
+     * @param {Boolean|null} immediate True by default. When set to false, notification process 
+     *                                 will be delayed (by this._delay number of milliseconds).
+     *                                 Use this in CPU-demanding environments when event you 
+     *                                 are firing is not critical to the programm flow.
+     * @returns {true|mixed} True if there is no <b>closure</b>, results of <b>closure</b> 
+     *                                 execution otherwise.
+     */
     say: function (event, data, closure, immediate) {
         if (!thereis(event)) {
             return undefined;
@@ -360,6 +508,31 @@ YAD.Dispatcher.prototype = {
         }
         return thereis(closure) ? closure(events) : true;
     },
+    /**
+     * Register one or more listeners to be notified when the event occures.
+     * 
+     * @public
+     * @method
+     * @param {YAD.Event|string} event Either single <b>YAD.Event</b> instance
+     *                                 or string to be used as Event name. 
+     *                                 Listeners will be registered to this particular 
+     *                                 event without regard to the event name composition
+     *                                 (using "." or no).
+     * @param {Function} listener Somethig callable.<br />
+     *                                 You can use prepared <b>YAD.Listener</b> object. 
+     *                                 In this case there is no need to pass any context 
+     *                                 (it will be ignored).<br />
+     *                                 Also you can use array to pass several listeners.
+     *                                 Each item can be either listener or <b>YAD.Listener</b> 
+     *                                 object or array of two elemnts where the first 
+     *                                 one is listener (callable), and the second one 
+     *                                 is context. Context param will be used with any 
+     *                                 listeners that don't have their own.
+     * @param {Object|null} context If you rely on <b>"this"</b> keyword inside the listener you can
+     *                                 still safely ise it. Just pass what exactly should be 
+     *                                 considered as "this".
+     * @returns {YAD.Dispatcher}
+     */
     listen: function (event, listener, context) {
         var events = this._prepareEvents(event);
         var listeners = this._prepareListeners(listener, context);
@@ -368,6 +541,12 @@ YAD.Dispatcher.prototype = {
         }
         return this;
     },
+    /**
+     * Remove listener registration
+     * 
+     * @param {mixed} listener Callable listener or listener name.
+     * @returns {YAD.Dispatcher}
+     */
     unlistenListener: function (listener) {
         var listenerNames = this._prepareListenerNames(listener);
         for (var i = 0; i < listenerNames.length; i++) {
@@ -375,6 +554,17 @@ YAD.Dispatcher.prototype = {
         }
         return this;
     },
+    /**
+     * Don't listen to the event anymore
+     * 
+     * @param {YAD.Event|String} event Note, that in the case of complex event
+     *                                 such as <b>log.someaction.success</b>
+     *                                 only this particular event is handled.
+     *                                 I.e. listeners that listen to <b>log.someaction</b>
+     *                                 and <b>log</b> will still be notified in the case
+     *                                 of <b>log.someaction.success</b> event firing.
+     * @returns {YAD.Dispatcher}
+     */
     unlistenEvent: function (event) {
         var events = this._prepareEvents(event);
         if (thereis(this._eventListeners[events[0].getName()])) {
@@ -382,19 +572,35 @@ YAD.Dispatcher.prototype = {
         }
         return this;
     },
+    /**
+     * Don't listen to the event anymore as well as all events, succeeding this in hierarchy.
+     * I.e. when using <b>log</b> as event param, all events starting with 'log.' 
+     * will also be ignored forevermore.
+     * 
+     * @param {YAD.Event|String} event
+     * @returns {YAD.Dispatcher}
+     */
     unlistenEventHeap: function (event) {
         var events = this._prepareEvents(event);
         for (var property in this._eventListeners) {
             if (this._eventListeners.hasOwnProperty(property)) {
-                if (property.indexOf(events[0].getName()) === 0) {
+                if (property.indexOf(events[0].getName() + '.') === 0) {
                     delete this._eventListeners[property];
                 }
             }
         }
         return this;
     },
+    /**
+     * Set config for current dispatcher
+     * 
+     * @param {Number} delay Delay for timeout in delayed notification in milliseconds.
+     * @param {Number} dispatchMode 
+     * @returns {YAD.Dispatcher.prototype}
+     */
     configure: function (delay, dispatchMode) {
         this._delay = iselse(delay, 0);
+        //ToDo вспомнить, нахера
         this._dispatchMode = iselse(dispatchMode, 0);
         return this;
     }
