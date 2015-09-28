@@ -241,12 +241,16 @@ YAD.Dispatcher.prototype = {
      */
     _delay: 0,
     /**
-     * ToDo вспомнить, нахера
+     * Default behavior of event dispatching. When set to <b>true</b> (default) events 
+     * will be dispatched immediately. When set to <b>false</b> (optional in 
+     * <b>configure</b> method) events will be dispatched with delay. 
+     * <b>immediate</b> parameter in <b>say</b> method overrides _dispatchMode setting.
+     * 
      * @private
      * @property
      * @type {Number}
      */
-    _dispatchMode: 0,
+    _dispatchMode: true,
     /**
      * Event listeners. Array is used as a hash table, where keys are event names.
      * 
@@ -486,8 +490,11 @@ YAD.Dispatcher.prototype = {
      *                                 Closure should accept array of Event objects, event if 
      *                                 Event instance is passed as the first param (in that case 
      *                                 array will contain one element).
-     * @param {Boolean|null} immediate True by default. When set to false, notification process 
-     *                                 will be delayed (by this._delay number of milliseconds).
+     * @param {Boolean|null} immediate When set to false, notification process will be delayed 
+     *                                 (by this._delay number of milliseconds).
+     *                                 When set to false, notification will occure immediately.
+     *                                 Omission of this parameter results in using 
+     *                                 this._dispatchMode option to determine method behavior.
      *                                 Use this in CPU-demanding environments when event you 
      *                                 are firing is not critical to the programm flow.
      * @returns {true|mixed} True if there is no <b>closure</b>, results of <b>closure</b> 
@@ -497,7 +504,7 @@ YAD.Dispatcher.prototype = {
         if (!thereis(event)) {
             return undefined;
         }
-        immediate = iselse(immediate, true);
+        immediate = iselse(immediate, this._dispatchMode);
         var events = this._prepareEvents(event, data);
         if (immediate) {
             this._dispatch(events);
@@ -544,6 +551,8 @@ YAD.Dispatcher.prototype = {
     /**
      * Remove listener registration
      * 
+     * @public
+     * @method
      * @param {mixed} listener Callable listener or listener name.
      * @returns {YAD.Dispatcher}
      */
@@ -557,6 +566,8 @@ YAD.Dispatcher.prototype = {
     /**
      * Don't listen to the event anymore
      * 
+     * @public
+     * @method
      * @param {YAD.Event|String} event Note, that in the case of complex event
      *                                 such as <b>log.someaction.success</b>
      *                                 only this particular event is handled.
@@ -577,6 +588,8 @@ YAD.Dispatcher.prototype = {
      * I.e. when using <b>log</b> as event param, all events starting with 'log.' 
      * will also be ignored forevermore.
      * 
+     * @public
+     * @method
      * @param {YAD.Event|String} event
      * @returns {YAD.Dispatcher}
      */
@@ -594,89 +607,278 @@ YAD.Dispatcher.prototype = {
     /**
      * Set config for current dispatcher
      * 
+     * @public
+     * @method
      * @param {Number} delay Delay for timeout in delayed notification in milliseconds.
-     * @param {Number} dispatchMode 
+     * @param {Boolean} dispatchMode Default behavior of notification process. 
+     *                               True means immediate notification and false 
+     *                               means delayed one.
      * @returns {YAD.Dispatcher.prototype}
      */
     configure: function (delay, dispatchMode) {
         this._delay = iselse(delay, 0);
         //ToDo вспомнить, нахера
-        this._dispatchMode = iselse(dispatchMode, 0);
+        this._dispatchMode = iselse(dispatchMode, true);
         return this;
     }
 };
 
 YAD.Event.prototype = {
+    /**
+     * Event name - identifier. Default 'exclamation' implies some nonsense.
+     * 
+     * @private
+     * @property
+     * @type {String}
+     */
     _name: 'exclamation',
+    /**
+     * Data, transmitting from event creator to listeners.
+     * 
+     * @private
+     * @property
+     * @type {Object}
+     */
     _data: {},
+    /**
+     * Indication that event propagation is stopped.
+     * 
+     * @private
+     * @property
+     * @type {Boolean}
+     */
     _stopped: false,
+    /**
+     * Prepare event from params.
+     * 
+     * @private
+     * @method
+     * @param {String} name Event name
+     * @param {type} data Event data
+     * @returns {YAD.Event}
+     */
     _parse: function (name, data) {
         this.setName(name).setData(data);
         return this;
     },
+    /**
+     * Carry on additional info from one listener to others handling this event.
+     * Note: it's not recommended to use this option.
+     * 
+     * @public
+     * @method
+     * @param {String} key Data key (property name)
+     * @param {mixed} value Data value (property value)
+     * @returns {YAD.Event}
+     */
     setCarryOn: function (key, value) {
         this._data[key] = value;
         return this;
     },
+    /**
+     * Set event name
+     * 
+     * @public
+     * @method
+     * @param {String} name
+     * @returns {YAD.Event}
+     */
     setName: function (name) {
         this._name = iselse(name, this._name);
         return this;
     },
+    /**
+     * Set event data
+     * 
+     * @public
+     * @method
+     * @param {Object} data
+     * @returns {YAD.Event}
+     */
     setData: function (data) {
         this._data = iselse(data, this._data);
         return this;
     },
+    /**
+     * Stop event propagation
+     * 
+     * @public
+     * @method
+     * @returns {YAD.Event}
+     */
     stopPropagation: function () {
         this._stopped = true;
         return this;
     },
+    /**
+     * Stop event propagation.
+     * Alias for <b>YAD.Event.stopPropagation</b>
+     * 
+     * @public
+     * @method
+     * @returns {YAD.Event}
+     */
     stop: function () {
         return this.stopPropagation();
     },
+    /**
+     * Get state of event propagation
+     * 
+     * @public
+     * @method
+     * @returns {Boolean} <b>True</b> if event propagation is stopped, <b>false</b> if 
+     *                    event is in normal operation mode.
+     */
     isStopped: function () {
         return this._stopped;
     },
+    /**
+     * Get event name
+     * @public
+     * @method
+     * @returns {String} Event name (identifier)
+     */
     getName: function () {
         return this._name;
     },
+    /**
+     * Get event data
+     * 
+     * @public
+     * @method
+     * @returns {Object}
+     */
     getData: function () {
         return this._data;
     }
 };
 
 YAD.Listener.prototype = {
+    /**
+     * Listener name
+     * 
+     * @private
+     * @property
+     * @type {String}
+     */
     _name: undefined,
+    /**
+     * Listener itself (callable to be executed on notification)
+     * 
+     * @private
+     * @property
+     * @type {Callable}
+     */
     _executor: undefined,
+    /**
+     * Listener context. Inside <b>_executor</b> this context will define 
+     * meaning of <b>this</b> keyword
+     * 
+     * @private
+     * @property
+     * @type {Object}
+     */
     _context: undefined,
+    /**
+     * Prepare listener from data
+     *  
+     * @private
+     * @method
+     * @param {Callable} executor
+     * @param {Object} context
+     * @param {String} name
+     * @returns {YAD.Listener}
+     */
     _parse: function (executor, context, name) {
         this.setExecutor(executor).setContext(context).setName(name);
         return this;
     },
+    /**
+     * Set listener name. Use current this._name if none provided
+     * 
+     * @public
+     * @method
+     * @param {String} name
+     * @returns {YAD.Listener}
+     */
     setName: function (name) {
         this._name = iselse(name, this._name);
         return this;
     },
+    /**
+     * Set listener executor. If name is not set yet, name is generated as 
+     * stringified executor.
+     * 
+     * @public
+     * @method
+     * @param {Callable} executor
+     * @returns {YAD.Listener}
+     */
     setExecutor: function (executor) {
         this._executor = executor;
         this._name = iselse(this._name, this._executor.toString());
         return this;
     },
+    /**
+     * Set executor context (<b>window</b> by default)
+     * 
+     * @public
+     * @method
+     * @param {Object} context
+     * @returns {YAD.Listener}
+     */
     setContext: function (context) {
         this._context = iselse(context, window);
         return this;
     },
+    /**
+     * Get listener name
+     * 
+     * @public
+     * @method
+     * @returns {String|undefined}
+     */
     getName: function () {
         return this._name;
     },
+    /**
+     * Get listener executor
+     * 
+     * @public
+     * @method
+     * @returns {Callable|undefined}
+     */
     getExecutor: function () {
         return this._executor;
     },
+    /**
+     * Get executor context
+     * 
+     * @public
+     * @method
+     * @returns {Object|undefined}
+     */
     getContext: function () {
         return this._context;
     },
+    /**
+     * Check if executor is proper callbale
+     * 
+     * @public
+     * @method
+     * @returns {Boolean} True if executor is callable
+     */
     isViable: function () {
         return isCallable(this._executor);
     },
+    /**
+     * Call executor with given context on given event
+     * 
+     * @public
+     * @method
+     * @param {YAD.Event} event Event
+     * @returns {mixed|undefined} Undefined if this listener is not viable
+     */
     invoke: function (event) {
         if (this.isViable()) {
             return this._executor.call(this._context, event);
