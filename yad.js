@@ -192,6 +192,9 @@ var YAD = {
      *                                 <b>Note</b>: in the case of whisper closure 
      *                                 is executed after the timeout is set, but before 
      *                                 listeners themselves are executed.
+     *                                 Usage of whisper method is recommended if you are wary
+     *                                 of insufficient security and/or stability of 
+     *                                 listeners code.
      */
     whisper: function (event, data, closure) {
         return this.getDispatcher().say(event, data, closure, false);
